@@ -51,6 +51,63 @@ namespace SnowMaker
             }
         }
 
+        public long LastId(string scopeName)
+        {
+            var state = GetScopeState(scopeName);
+
+            if (state.LastId != 0)
+            {
+                return state.LastId;
+            }
+
+            var data = optimisticDataStore.GetData(scopeName);
+
+            long nextId;
+            if (!long.TryParse(data, out nextId))
+                throw new UniqueIdGenerationException(string.Format(
+                   "The id seed returned from storage for scope '{0}' was corrupt, and could not be parsed as a long. The data returned was: {1}",
+                   scopeName,
+                   data));
+
+            return nextId;
+        }
+
+        public void SetSeed(string scopeName, long seed)
+        {
+            var writesAttempted = 0;
+            var state = GetScopeState(scopeName);
+
+            while (writesAttempted < maxWriteAttempts)
+            {
+                var data = optimisticDataStore.GetData(scopeName);
+
+                long nextId;
+                if (!long.TryParse(data, out nextId))
+                    throw new UniqueIdGenerationException(string.Format(
+                       "The id seed returned from storage for scope '{0}' was corrupt, and could not be parsed as a long. The data returned was: {1}",
+                       scopeName,
+                       data));
+
+                if (seed < nextId)
+                {
+                    throw new UniqueIdGenerationException(string.Format("Seed value cannot be less then the next available id of {0}", nextId));
+                }
+
+                state.LastId = seed - 1;
+                state.HighestIdAvailableInBatch = (seed - 1) + batchSize;
+                var firstIdInNextBatch = state.HighestIdAvailableInBatch + 1;
+
+                if (optimisticDataStore.TryOptimisticWrite(scopeName, firstIdInNextBatch.ToString(CultureInfo.InvariantCulture)))
+                    return;
+
+                writesAttempted++;
+            }
+
+            throw new UniqueIdGenerationException(string.Format(
+                "Failed to update the data store after {0} attempts. This likely represents too much contention against the store. Increase the batch size to a value more appropriate to your generation load.",
+                writesAttempted));
+        }
+
         ScopeState GetScopeState(string scopeName)
         {
             return states.GetValue(

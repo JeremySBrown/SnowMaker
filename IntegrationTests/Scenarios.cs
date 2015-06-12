@@ -177,5 +177,52 @@ namespace IntegrationTests.cs
                     Assert.Inconclusive("The test failed to actually utilize multiple threads");
             }
         }
+
+        // Seed Tests
+        [Test]
+        public void ShouldReturnSeedThenIncrementFromSeed()
+        {
+            // Arrange
+            using (var testScope = BuildTestScope())
+            {
+                var store = BuildStore(testScope);
+                var generator = new UniqueIdGenerator(store) { BatchSize = 3 };
+                long seed = 1000;
+                generator.SetSeed(testScope.IdScopeName, seed);
+                // Act
+                var generatedId1 = generator.NextId(testScope.IdScopeName);
+                var generatedId2 = generator.NextId(testScope.IdScopeName);
+                var generatedId3 = generator.NextId(testScope.IdScopeName);
+
+                // Assert
+                Assert.AreEqual(seed, generatedId1);
+                Assert.AreEqual(seed + 1, generatedId2);
+                Assert.AreEqual(seed + 2, generatedId3);
+            }
+        }
+
+        
+        [Test]
+        [ExpectedException(typeof(UniqueIdGenerationException))]
+        public void ShouldNotAllowSeedValueLowerThanNextId()
+        {
+            // Arrange
+            using (var testScope = BuildTestScope())
+            {
+                var store = BuildStore(testScope);
+                var generator = new UniqueIdGenerator(store) { BatchSize = 3 };
+                long seed = 1000;
+                generator.SetSeed(testScope.IdScopeName, seed);
+                // Act
+                var generatedId1 = generator.NextId(testScope.IdScopeName);
+                var generatedId2 = generator.NextId(testScope.IdScopeName);
+                var generatedId3 = generator.NextId(testScope.IdScopeName);
+                generator.SetSeed(testScope.IdScopeName, seed);
+                // Assert
+                Assert.AreEqual(seed, generatedId1);
+                Assert.AreEqual(seed + 1, generatedId2);
+                Assert.AreEqual(seed + 2, generatedId3);
+            }
+        }
     }
 }
